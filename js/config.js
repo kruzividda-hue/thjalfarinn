@@ -7,6 +7,6 @@
 //  Security í gagnagrunninum ver gögnin.)
 
 window.THJALFARINN_CONFIG = {
-  SUPABASE_URL: "SETTU_INN_SUPABASE_URL",
-  SUPABASE_ANON_KEY: "SETTU_INN_SUPABASE_ANON_KEY",
+  SUPABASE_URL: "https://mpvftijnfdaskiekgtrx.supabase.co",
+  SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1wdmZ0aWpuZmRhc2tpZWtndHJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2Njg4NjgsImV4cCI6MjEwMDI0NDg2OH0.SFiss2ctXDyKZ4YBqd-WxhK_PbF5xfPbdHXabHwj88c",
 };
