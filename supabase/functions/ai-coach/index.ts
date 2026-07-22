@@ -5,7 +5,8 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-const GEMINI_MODEL = "gemini-2.5-flash";
+// Reynt í þessari röð — ef módel hverfur (404) er næsta prófað sjálfkrafa
+const GEMINI_MODELS = ["gemini-flash-latest", "gemini-3.1-flash", "gemini-3.1-flash-lite"];
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -97,30 +98,40 @@ async function callGemini(
     { role: "user", parts: [{ text: userMessage }] },
   ];
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents,
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
-          maxOutputTokens: 16384,
-        },
-      }),
+  const body = JSON.stringify({
+    systemInstruction: { parts: [{ text: system }] },
+    contents,
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: RESPONSE_SCHEMA,
+      maxOutputTokens: 16384,
     },
-  );
+  });
 
-  if (!res.ok) {
-    const errText = await res.text();
-    console.error("Gemini villa:", res.status, errText);
-    if (res.status === 429) {
+  let res: Response | null = null;
+  for (const model of GEMINI_MODELS) {
+    res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body,
+      },
+    );
+    if (res.status !== 404) break; // 404 = módel ekki til, prófa næsta
+    console.error(`Gemini módel '${model}' fannst ekki (404), prófa næsta...`);
+  }
+
+  if (!res || !res.ok) {
+    const errText = res ? await res.text() : "ekkert svar";
+    console.error("Gemini villa:", res?.status, errText);
+    if (res?.status === 429) {
       throw new Error("AI-þjálfarinn er upptekinn (dagskvóti eða hraðatakmörk hjá Gemini) — reyndu aftur eftir smá stund");
     }
-    throw new Error(`Gemini API villa (${res.status})`);
+    if (res?.status === 404) {
+      throw new Error("Ekkert Gemini-módel fannst — láttu Markús/Claude vita svo hægt sé að uppfæra módellistann");
+    }
+    throw new Error(`Gemini API villa (${res?.status})`);
   }
 
   const data = await res.json();
