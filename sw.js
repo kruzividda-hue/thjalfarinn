@@ -1,5 +1,5 @@
 // Þjálfarinn service worker — einfalt skel-cache
-const CACHE = "thjalfarinn-v5";
+const CACHE = "thjalfarinn-v6";
 const SHELL = [
   ".",
   "index.html",

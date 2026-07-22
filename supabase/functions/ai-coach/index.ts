@@ -29,6 +29,17 @@ const EXERCISE_SCHEMA = {
   },
 };
 
+const CARDIO_SCHEMA = {
+  type: "object",
+  nullable: true,
+  required: ["name", "minutes", "notes"],
+  properties: {
+    name: { type: "string", description: "Enskt heiti, t.d. 'Treadmill', 'Stairmaster', 'Rowing Machine'" },
+    minutes: { type: "integer" },
+    notes: { type: "string", description: "Ákefð/hraði á íslensku, t.d. 'Rösk ganga, 4% halli'" },
+  },
+};
+
 const PLAN_SCHEMA = {
   type: "object",
   nullable: true,
@@ -41,11 +52,13 @@ const PLAN_SCHEMA = {
       type: "array",
       items: {
         type: "object",
-        required: ["key", "name", "exercises"],
+        required: ["key", "name", "exercises", "warmup", "cooldown"],
         properties: {
           key: { type: "string", description: "Stutt auðkenni, t.d. 'a', 'b', 'c'" },
           name: { type: "string", description: "T.d. 'Dagur A – Ýtingar'" },
+          warmup: CARDIO_SCHEMA,
           exercises: { type: "array", items: EXERCISE_SCHEMA },
+          cooldown: CARDIO_SCHEMA,
         },
       },
     },
@@ -82,6 +95,7 @@ Reglur:
 - Þegar þú skilar plani skaltu skila ÖLLU planinu (allir dagar, allar æfingar), ekki bara breytingunum.
 - Notaðu æfingar sem passa við búnað notandans. Reps sem bil, t.d. "8-10". Hvíld í sekúndum.
 - Fyrir hverja æfingu: settu enska heitið líka í video_query (yfirleitt það sama og name).
+- Hver æfingadagur skal hafa warmup (5-10 mín létt cardio, t.d. Treadmill/Stairmaster/Rowing Machine) og cooldown (cardio í lok æfingar). Lengd og ákefð cooldown fer eftir markmiði: meira (10-20 mín) ef markmiðið er að léttast eða bæta form, styttra (5-10 mín) ef aðaláherslan er vöðva-/styrktaruppbygging. Ákefðarleiðbeiningar í notes á íslensku.
 - Öryggi fyrst: engin óraunhæf stökk í þyngdum, minntu á upphitun og tækni þegar við á.
 
 Gögn um notandann:

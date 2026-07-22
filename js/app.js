@@ -420,6 +420,8 @@
       workoutKey: key,
       workoutName: workout.name,
       startedAt: Date.now(),
+      warmup: workout.warmup ? { ...workout.warmup, done: false } : null,
+      cooldown: workout.cooldown ? { ...workout.cooldown, done: false } : null,
       exercises: workout.exercises.map((ex) => {
         let weight = ex.weight_kg ?? "";
         let bumped = false;
@@ -454,11 +456,25 @@
     renderMain("workout");
   }
 
+  function cardioCard(kind, label, c) {
+    return `
+      <div class="card cardio-card ${c.done ? "cardio-done-card" : ""}">
+        <span class="today-badge">${label}</span>
+        <div class="exercise-title">${esc(c.name)} · ${c.minutes} mín</div>
+        ${c.notes ? `<div class="exercise-note">${esc(c.notes)}</div>` : ""}
+        <div class="exercise-actions">
+          <button type="button" class="video-link cardio-timer" data-kind="${kind}">⏱ Ræsa teljara</button>
+          <button type="button" class="video-link swap-btn cardio-check" data-kind="${kind}">${c.done ? "✓ Búið!" : "Merkja búið"}</button>
+        </div>
+      </div>`;
+  }
+
   function renderActiveWorkout(root) {
     const s = state.workoutSession;
     root.innerHTML = `
       <h1>${esc(s.workoutName)}</h1>
       <p class="subtitle">Skráðu þyngd og endurtekningar, hakaðu við hvert sett</p>
+      ${s.warmup ? cardioCard("warmup", "🔥 UPPHITUN", s.warmup) : ""}
       ${s.exercises.map((ex, ei) => {
         const ph = findExercisePhoto(ex);
         return `
@@ -486,6 +502,7 @@
             </div>`).join("")}
         </div>`;
       }).join("")}
+      ${s.cooldown ? cardioCard("cooldown", "🏃 CARDIO Í LOKIN", s.cooldown) : ""}
       <button class="btn" id="finishBtn">Klára æfingu 🏁</button>
       <button class="btn danger" id="cancelBtn">Hætta við</button>`;
 
@@ -516,6 +533,23 @@
     root.querySelectorAll(".swap-btn").forEach((btn) => {
       btn.onclick = () => showSwapModal(Number(btn.dataset.ei));
     });
+    // Cardio: teljari og merkja búið
+    root.querySelectorAll(".cardio-check").forEach((btn) => {
+      btn.onclick = () => {
+        const c = s[btn.dataset.kind];
+        c.done = !c.done;
+        renderMain("workout");
+      };
+    });
+    root.querySelectorAll(".cardio-timer").forEach((btn) => {
+      btn.onclick = () => {
+        const c = s[btn.dataset.kind];
+        showCardioTimer(c, () => {
+          c.done = true;
+          renderMain("workout");
+        });
+      };
+    });
     // Smellur á mynd víxlar milli upphafs- og lokastöðu
     root.querySelectorAll(".exercise-photo").forEach((img) => {
       img.onclick = () => {
@@ -534,6 +568,34 @@
       if (!anyDone && !confirm("Engin sett merkt kláruð — klára samt?")) return;
       showFeedbackModal();
     };
+  }
+
+  function showCardioTimer(c, onFinish) {
+    let remaining = c.minutes * 60;
+    const fmt = (t) => `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+    const overlay = el(`
+      <div class="rest-overlay">
+        <div class="rest-label">${esc(c.name)}</div>
+        <div class="rest-time" id="cardioTime">${fmt(remaining)}</div>
+        ${c.notes ? `<p style="color:var(--text-dim);margin:6px 20px 0;text-align:center">${esc(c.notes)}</p>` : ""}
+        <button class="btn secondary" id="cardioStop">Hætta</button>
+        <button class="btn" id="cardioDone" style="max-width:220px">Búinn ✓</button>
+      </div>`);
+    document.body.appendChild(overlay);
+    const timeEl = overlay.querySelector("#cardioTime");
+    const interval = setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        clearInterval(interval);
+        overlay.remove();
+        if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
+        onFinish();
+      } else {
+        timeEl.textContent = fmt(remaining);
+      }
+    }, 1000);
+    overlay.querySelector("#cardioStop").onclick = () => { clearInterval(interval); overlay.remove(); };
+    overlay.querySelector("#cardioDone").onclick = () => { clearInterval(interval); overlay.remove(); onFinish(); };
   }
 
   function showRestTimer(seconds) {
@@ -666,6 +728,8 @@
       return {
         workout_name: s.workoutName,
         duration_min: Math.round((Date.now() - s.startedAt) / 60000),
+        warmup: s.warmup ? { name: s.warmup.name, minutes: s.warmup.minutes, done: !!s.warmup.done } : null,
+        cooldown: s.cooldown ? { name: s.cooldown.name, minutes: s.cooldown.minutes, done: !!s.cooldown.done } : null,
         exercises: s.exercises.map((ex) => ({
           name: ex.name,
           target_reps: ex.targetReps,
