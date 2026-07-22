@@ -312,6 +312,7 @@
     app.querySelectorAll(".tabbar button").forEach((b) => {
       b.onclick = () => renderMain(b.dataset.tab);
     });
+    if (!state.workoutSession) releaseWakeLock();
     const content = document.getElementById("tabContent");
     if (state.tab === "home") renderHome(content);
     else if (state.tab === "workout") renderWorkoutTab(content);
@@ -394,6 +395,25 @@
     });
   }
 
+  // ---------- Halda skjánum vakandi í æfingu (Wake Lock) ----------
+  let wakeLock = null;
+  async function acquireWakeLock() {
+    try {
+      if ("wakeLock" in navigator && !wakeLock) {
+        wakeLock = await navigator.wakeLock.request("screen");
+        wakeLock.addEventListener("release", () => { wakeLock = null; });
+      }
+    } catch (_) { /* ekki stutt eða hafnað - skjárinn læsist þá bara venjulega */ }
+  }
+  function releaseWakeLock() {
+    try { if (wakeLock) wakeLock.release(); } catch (_) { /* ekkert */ }
+    wakeLock = null;
+  }
+  // iOS sleppir lásnum þegar farið er úr appinu - taka hann aftur við endurkomu
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible" && state.workoutSession) acquireWakeLock();
+  });
+
   // ---------- Virk æfing ----------
   // Efri mörk reps-bils: "8-10" -> 10, "12" -> 12
   function topReps(repsStr) {
@@ -475,6 +495,7 @@
 
   function renderActiveWorkout(root) {
     const s = state.workoutSession;
+    acquireWakeLock();
     root.innerHTML = `
       <h1>${esc(s.workoutName)}</h1>
       <p class="subtitle">Skráðu þyngd og endurtekningar, hakaðu við hvert sett</p>
