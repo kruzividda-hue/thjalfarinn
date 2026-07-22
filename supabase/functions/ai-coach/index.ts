@@ -1,9 +1,11 @@
 // Þjálfarinn — AI edge function (Supabase Edge Functions / Deno)
-// Talar við Claude API. API-lykillinn er geymdur sem secret í Supabase
-// (ANTHROPIC_API_KEY) og fer aldrei í vafrann.
+// Talar við Google Gemini API (ókeypis þrep dugar vel fyrir einn notanda).
+// API-lykillinn er geymdur sem secret í Supabase (GEMINI_API_KEY)
+// og fer aldrei í vafrann.
 
-import Anthropic from "npm:@anthropic-ai/sdk";
 import { createClient } from "npm:@supabase/supabase-js@2";
+
+const GEMINI_MODEL = "gemini-2.5-flash";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -11,15 +13,15 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
+// Svarskema (OpenAPI-snið sem Gemini structured output notar)
 const EXERCISE_SCHEMA = {
   type: "object",
-  additionalProperties: false,
   required: ["name", "sets", "reps", "weight_kg", "rest_sec", "notes"],
   properties: {
     name: { type: "string" },
     sets: { type: "integer" },
     reps: { type: "string", description: "T.d. '8-10' eða '12'" },
-    weight_kg: { anyOf: [{ type: "number" }, { type: "null" }], description: "null = líkamsþyngd/óákveðið" },
+    weight_kg: { type: "number", nullable: true, description: "null = líkamsþyngd/óákveðið" },
     rest_sec: { type: "integer" },
     notes: { type: "string", description: "Stutt leiðbeining, má vera tómur strengur" },
   },
@@ -27,7 +29,7 @@ const EXERCISE_SCHEMA = {
 
 const PLAN_SCHEMA = {
   type: "object",
-  additionalProperties: false,
+  nullable: true,
   required: ["name", "days_per_week", "workouts", "notes"],
   properties: {
     name: { type: "string" },
@@ -37,7 +39,6 @@ const PLAN_SCHEMA = {
       type: "array",
       items: {
         type: "object",
-        additionalProperties: false,
         required: ["key", "name", "exercises"],
         properties: {
           key: { type: "string", description: "Stutt auðkenni, t.d. 'a', 'b', 'c'" },
@@ -51,14 +52,10 @@ const PLAN_SCHEMA = {
 
 const RESPONSE_SCHEMA = {
   type: "object",
-  additionalProperties: false,
   required: ["message", "plan"],
   properties: {
     message: { type: "string", description: "Skilaboð til notandans á íslensku" },
-    plan: {
-      anyOf: [{ type: "null" }, PLAN_SCHEMA],
-      description: "Nýtt/uppfært plan, eða null ef planið á að haldast óbreytt",
-    },
+    plan: PLAN_SCHEMA,
   },
 };
 
@@ -82,6 +79,58 @@ PRÓFÍLL: ${JSON.stringify(profile ?? {})}
 VIRKT PLAN: ${JSON.stringify(plan ?? null)}
 SÍÐUSTU ÆFINGAR (nýjast fyrst): ${JSON.stringify(recentLogs ?? [])}
 LÍKAMSÞYNGD (nýjast fyrst): ${JSON.stringify(weights ?? [])}`;
+}
+
+async function callGemini(
+  system: string,
+  history: { role: string; content: string }[],
+  userMessage: string,
+): Promise<{ message: string; plan: Record<string, unknown> | null }> {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) throw new Error("GEMINI_API_KEY vantar í Edge Function secrets");
+
+  const contents = [
+    ...history.map((m) => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }],
+    })),
+    { role: "user", parts: [{ text: userMessage }] },
+  ];
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents,
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: RESPONSE_SCHEMA,
+          maxOutputTokens: 16384,
+        },
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error("Gemini villa:", res.status, errText);
+    if (res.status === 429) {
+      throw new Error("AI-þjálfarinn er upptekinn (dagskvóti eða hraðatakmörk hjá Gemini) — reyndu aftur eftir smá stund");
+    }
+    throw new Error(`Gemini API villa (${res.status})`);
+  }
+
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.map((p: { text?: string }) => p.text ?? "").join("");
+  if (!text) {
+    console.error("Tómt svar frá Gemini:", JSON.stringify(data).slice(0, 500));
+    throw new Error("Ekkert svar frá AI");
+  }
+  const parsed = JSON.parse(text);
+  return { message: String(parsed.message ?? ""), plan: parsed.plan ?? null };
 }
 
 Deno.serve(async (req) => {
@@ -146,33 +195,11 @@ Farðu yfir þetta, gefðu mér stutta endurgjöf og uppfærðu planið (þyngdi
       });
     }
 
-    const anthropic = new Anthropic({ apiKey: Deno.env.get("ANTHROPIC_API_KEY")! });
-
-    const messages: { role: "user" | "assistant"; content: string }[] = [];
-    if (mode === "chat") {
-      for (const m of chatHistory) {
-        messages.push({ role: m.role as "user" | "assistant", content: m.content });
-      }
-    }
-    messages.push({ role: "user", content: userMessage });
-
-    const response = await anthropic.messages.create({
-      model: "claude-opus-4-8",
-      max_tokens: 16000,
-      thinking: { type: "adaptive" },
-      system: systemPrompt(profile, activePlan, logsRes.data, weightsRes.data),
-      messages,
-      output_config: { format: { type: "json_schema", schema: RESPONSE_SCHEMA } },
-    });
-
-    const textBlock = response.content.find((b) => b.type === "text");
-    if (!textBlock || textBlock.type !== "text") {
-      throw new Error("Ekkert svar frá AI");
-    }
-    const result = JSON.parse(textBlock.text) as {
-      message: string;
-      plan: Record<string, unknown> | null;
-    };
+    const result = await callGemini(
+      systemPrompt(profile, activePlan, logsRes.data, weightsRes.data),
+      mode === "chat" ? chatHistory : [],
+      userMessage,
+    );
 
     // Vista uppfært plan ef AI skilaði því
     let savedPlan = null;

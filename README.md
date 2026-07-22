@@ -15,7 +15,7 @@ Persónulegur AI-æfingaþjálfari — vefapp (PWA) fyrir iPhone, innblásið af
 |---|---|
 | Framendi | Vanilla JS PWA, hýst á GitHub Pages |
 | Innskráning + gagnagrunnur | Supabase (Auth + Postgres með Row Level Security) |
-| AI | Claude API (claude-opus-4-8) í gegnum Supabase Edge Function — API-lykillinn fer aldrei í vafrann |
+| AI | Google Gemini API (gemini-2.5-flash, ókeypis þrep) í gegnum Supabase Edge Function — API-lykillinn fer aldrei í vafrann |
 
 ## Uppsetning (gerist einu sinni)
 
@@ -34,8 +34,8 @@ Persónulegur AI-æfingaþjálfari — vefapp (PWA) fyrir iPhone, innblásið af
 
 ### 3. Setja upp AI-fallið (Edge Function)
 
-1. Náðu í Anthropic API-lykil á [platform.claude.com](https://platform.claude.com) (Settings → API keys).
-2. Í Supabase: **Edge Functions → Secrets** → bættu við secret með nafninu `ANTHROPIC_API_KEY` og límdu lykilinn inn.
+1. Náðu í ókeypis Gemini API-lykil á [aistudio.google.com/apikey](https://aistudio.google.com/apikey) (innskráning með Google-aðgangi → **Create API key**).
+2. Í Supabase: **Edge Functions → Secrets** → bættu við secret með nafninu `GEMINI_API_KEY` og límdu lykilinn inn.
 3. **Edge Functions → Deploy a new function** (í vafranum, "Via Editor"):
    - Nafn: `ai-coach`
    - Límdu inn allt innihald [`supabase/functions/ai-coach/index.ts`](supabase/functions/ai-coach/index.ts)
@@ -76,4 +76,4 @@ supabase/functions/ai-coach/        Edge Function sem talar við Claude API
 
 - Supabase: frítt (free tier dugar vel fyrir einn notanda)
 - GitHub Pages: frítt
-- Claude API: greitt eftir notkun — hvert AI-kall (plan/endurgjöf/spjall) kostar venjulega nokkra tugi króna. Hægt að setja eyðslumörk í Anthropic-stjórnborðinu.
+- Gemini API: ókeypis þrepið dugar vel fyrir persónulega notkun (nokkur hundruð köll á dag á gemini-2.5-flash). Athugið: á ókeypis þrepinu má Google nota gögnin til að bæta sín módel.
