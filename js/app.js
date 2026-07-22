@@ -21,6 +21,17 @@
   function fmtDate(d) {
     return new Date(d).toLocaleDateString("is-IS", { day: "numeric", month: "short" });
   }
+  // Slóð á sýnikennslumyndband: notar enska heitið frá AI, annars
+  // enska heitið í sviga í nafninu, annars nafnið sjálft.
+  function videoUrl(ex) {
+    let q = ex.video_query;
+    if (!q) {
+      const m = /\(([^)]+)\)/.exec(ex.name || "");
+      q = m ? m[1] : ex.name;
+    }
+    return "https://www.youtube.com/results?search_query=" +
+      encodeURIComponent(q + " exercise form");
+  }
 
   // ---------- Stillingar ekki komnar ----------
   if (!CFG.SUPABASE_URL || CFG.SUPABASE_URL.startsWith("SETTU_INN")) {
@@ -324,6 +335,7 @@
       exercises: workout.exercises.map((ex) => ({
         name: ex.name,
         notes: ex.notes || "",
+        video_query: ex.video_query || "",
         restSec: ex.rest_sec || 90,
         targetReps: ex.reps,
         sets: Array.from({ length: ex.sets }, () => ({
@@ -344,7 +356,9 @@
       <p class="subtitle">Skráðu þyngd og endurtekningar, hakaðu við hvert sett</p>
       ${s.exercises.map((ex, ei) => `
         <div class="card exercise-block">
-          <div class="exercise-title">${esc(ex.name)}</div>
+          <div class="exercise-title">${esc(ex.name)}
+            <a class="video-link" href="${videoUrl(ex)}" target="_blank" rel="noopener">🎥 Sýnikennsla</a>
+          </div>
           ${ex.notes ? `<div class="exercise-note">${esc(ex.notes)}</div>` : ""}
           <div class="exercise-note">Markmið: ${ex.sets.length} sett × ${esc(ex.targetReps)} reps · hvíld ${ex.restSec}s</div>
           <div class="set-header"><span>#</span><span>KG</span><span>REPS</span><span></span></div>

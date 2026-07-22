@@ -17,7 +17,7 @@ const corsHeaders = {
 // Svarskema (OpenAPI-snið sem Gemini structured output notar)
 const EXERCISE_SCHEMA = {
   type: "object",
-  required: ["name", "sets", "reps", "weight_kg", "rest_sec", "notes"],
+  required: ["name", "sets", "reps", "weight_kg", "rest_sec", "notes", "video_query"],
   properties: {
     name: { type: "string" },
     sets: { type: "integer" },
@@ -25,6 +25,7 @@ const EXERCISE_SCHEMA = {
     weight_kg: { type: "number", nullable: true, description: "null = líkamsþyngd/óákveðið" },
     rest_sec: { type: "integer" },
     notes: { type: "string", description: "Stutt leiðbeining, má vera tómur strengur" },
+    video_query: { type: "string", description: "Enskt heiti æfingarinnar fyrir myndbandsleit, t.d. 'Seated Machine Chest Press'" },
   },
 };
 
@@ -73,6 +74,7 @@ Reglur:
 - Skilaðu "plan" AÐEINS þegar á að breyta planinu (nýtt plan, breyttar þyngdir/æfingar). Annars plan = null.
 - Þegar þú skilar plani skaltu skila ÖLLU planinu (allir dagar, allar æfingar), ekki bara breytingunum.
 - Notaðu æfingar sem passa við búnað notandans. Reps sem bil, t.d. "8-10". Hvíld í sekúndum.
+- Fyrir hverja æfingu: settu nákvæmt enskt heiti hennar í video_query (t.d. "Lat Pulldown", "Dumbbell Lateral Raise") svo hægt sé að finna sýnikennslumyndband.
 - Öryggi fyrst: engin óraunhæf stökk í þyngdum, minntu á upphitun og tækni þegar við á.
 
 Gögn um notandann:
