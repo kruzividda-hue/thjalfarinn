@@ -231,8 +231,12 @@
         <textarea id="notes" rows="3" placeholder="t.d. slæmt hné, vil leggja áherslu á axlir...">${esc(p.notes || "")}</textarea>
 
         <button class="btn" id="createPlanBtn">Búa til æfingaplan ✨</button>
+        ${state.planRow ? `<button class="btn secondary" id="obBackBtn">← Til baka án breytinga</button>` : ""}
         <div class="error-msg" id="obError"></div>
       </div>`;
+
+    const backBtn = document.getElementById("obBackBtn");
+    if (backBtn) backBtn.onclick = () => renderMain("home");
 
     app.querySelectorAll(".chip-row").forEach((row) => {
       row.addEventListener("click", (e) => {
