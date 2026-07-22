@@ -151,16 +151,20 @@ textarea { resize: none; }
 /* ---------- Æfing ---------- */
 .exercise-block { margin-bottom: 14px; }
 .exercise-title { font-weight: 700; margin-bottom: 2px; }
+.exercise-actions { display: flex; gap: 8px; margin: 4px 0 6px; }
 .video-link {
-  float: right;
   font-size: 0.78rem;
   font-weight: 600;
   color: var(--accent);
   text-decoration: none;
   background: rgba(52, 211, 153, 0.12);
+  border: none;
   border-radius: 8px;
-  padding: 3px 9px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: inherit;
 }
+.swap-btn { color: #7dd3fc; background: rgba(125, 211, 252, 0.12); }
 .exercise-note { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 8px; }
 .set-row {
   display: grid;

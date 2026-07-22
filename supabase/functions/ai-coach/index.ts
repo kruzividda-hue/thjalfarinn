@@ -54,10 +54,16 @@ const PLAN_SCHEMA = {
 
 const RESPONSE_SCHEMA = {
   type: "object",
-  required: ["message", "plan"],
+  required: ["message", "plan", "alternatives"],
   properties: {
     message: { type: "string", description: "Skilaboð til notandans á íslensku" },
     plan: PLAN_SCHEMA,
+    alternatives: {
+      type: "array",
+      nullable: true,
+      description: "Aðeins í swap-ham: 4-6 æfingar sem þjálfa sömu vöðva. Annars null.",
+      items: EXERCISE_SCHEMA,
+    },
   },
 };
 
@@ -143,7 +149,11 @@ async function callGemini(
     throw new Error("Ekkert svar frá AI");
   }
   const parsed = JSON.parse(text);
-  return { message: String(parsed.message ?? ""), plan: parsed.plan ?? null };
+  return {
+    message: String(parsed.message ?? ""),
+    plan: parsed.plan ?? null,
+    alternatives: Array.isArray(parsed.alternatives) ? parsed.alternatives : null,
+  };
 }
 
 Deno.serve(async (req) => {
@@ -193,6 +203,10 @@ Deno.serve(async (req) => {
       userMessage =
         "Búðu til nýtt æfingaplan fyrir mig út frá prófílnum mínum. Útskýrðu planið stuttlega í message og skilaðu því í plan.";
       if (body.message) userMessage += `\nAthugasemd frá mér: ${body.message}`;
+    } else if (mode === "swap") {
+      userMessage = `Ég er í ræktinni og æfingin/tækið "${String(body.exerciseName ?? "")}" er ekki í boði núna.
+Komdu með 4-6 aðrar æfingar sem þjálfa SÖMU vöðva, með áherslu á það sem líklegast er til í venjulegri (jafnvel lítilli) líkamsræktarstöð — og taktu tillit til búnaðarins í prófílnum mínum og meiðsla ef einhver eru.
+Skilaðu þeim í "alternatives" með sets/reps/þyngd/hvíld/video_query eins og vanalega (svipað álag og upprunalega æfingin). plan á að vera null. Hafðu message mjög stutt.`;
     } else if (mode === "checkin") {
       userMessage = `Ég var að klára æfingu. Hér er það sem ég skráði:
 ÆFING: ${JSON.stringify(body.workoutLog ?? {})}
@@ -240,7 +254,11 @@ Farðu yfir þetta, gefðu mér stutta endurgjöf og uppfærðu planið (þyngdi
     }
 
     return new Response(
-      JSON.stringify({ message: result.message, plan: savedPlan?.plan ?? null }),
+      JSON.stringify({
+        message: result.message,
+        plan: savedPlan?.plan ?? null,
+        alternatives: result.alternatives ?? null,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (err) {

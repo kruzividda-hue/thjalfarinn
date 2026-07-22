@@ -356,8 +356,10 @@
       <p class="subtitle">Skráðu þyngd og endurtekningar, hakaðu við hvert sett</p>
       ${s.exercises.map((ex, ei) => `
         <div class="card exercise-block">
-          <div class="exercise-title">${esc(ex.name)}
+          <div class="exercise-title">${esc(ex.name)}</div>
+          <div class="exercise-actions">
             <a class="video-link" href="${videoUrl(ex)}" target="_blank" rel="noopener">🎥 Sýnikennsla</a>
+            <button type="button" class="video-link swap-btn" data-ei="${ei}">⇄ Skipta út</button>
           </div>
           ${ex.notes ? `<div class="exercise-note">${esc(ex.notes)}</div>` : ""}
           <div class="exercise-note">Markmið: ${ex.sets.length} sett × ${esc(ex.targetReps)} reps · hvíld ${ex.restSec}s</div>
@@ -399,6 +401,9 @@
         }
       };
     });
+    root.querySelectorAll(".swap-btn").forEach((btn) => {
+      btn.onclick = () => showSwapModal(Number(btn.dataset.ei));
+    });
     document.getElementById("cancelBtn").onclick = () => {
       if (confirm("Hætta við æfinguna? Ekkert verður vistað.")) {
         state.workoutSession = null;
@@ -436,6 +441,79 @@
       clearInterval(interval);
       overlay.remove();
     };
+  }
+
+  // ---------- Skipta út æfingu ----------
+  async function showSwapModal(ei) {
+    const s = state.workoutSession;
+    const ex = s.exercises[ei];
+    const overlay = el(`
+      <div class="modal-overlay">
+        <div class="modal">
+          <h2>Skipta út: ${esc(ex.name)}</h2>
+          <div id="swapBody">
+            <div class="ai-thinking"><div class="spinner"></div>Þjálfarinn finnur svipaðar æfingar…</div>
+          </div>
+          <button class="link-btn" id="swapClose">Hætta við</button>
+        </div>
+      </div>`);
+    document.body.appendChild(overlay);
+    overlay.querySelector("#swapClose").onclick = () => overlay.remove();
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) overlay.remove(); });
+
+    try {
+      const res = await aiCall({ mode: "swap", exerciseName: ex.name, workoutKey: s.workoutKey });
+      const alts = res.alternatives || [];
+      const body = overlay.querySelector("#swapBody");
+      if (!alts.length) {
+        body.innerHTML = `<p class="ai-message">${esc(res.message || "Engar tillögur fundust — prófaðu aftur.")}</p>`;
+        return;
+      }
+      body.innerHTML = `
+        ${res.message ? `<p class="workout-meta" style="margin-bottom:10px">${esc(res.message)}</p>` : ""}
+        ${alts.map((a, i) => `
+          <div class="card clickable swap-alt" data-i="${i}">
+            <div class="exercise-title">${esc(a.name)}</div>
+            <div class="workout-meta">${a.sets} sett × ${esc(a.reps)}${a.weight_kg != null ? ` · ${a.weight_kg} kg` : ""} · hvíld ${a.rest_sec}s</div>
+            ${a.notes ? `<div class="exercise-note" style="margin:4px 0 0">${esc(a.notes)}</div>` : ""}
+          </div>`).join("")}`;
+      body.querySelectorAll(".swap-alt").forEach((cardEl) => {
+        cardEl.onclick = async () => {
+          const alt = alts[Number(cardEl.dataset.i)];
+          overlay.remove();
+          await applySwap(ei, alt);
+        };
+      });
+    } catch (e) {
+      const body = overlay.querySelector("#swapBody");
+      if (body) body.innerHTML = `<p class="error-msg" style="text-align:left">${esc(e.message || "Villa")}</p>`;
+    }
+  }
+
+  async function applySwap(ei, alt) {
+    const s = state.workoutSession;
+    // 1) Uppfæra planið sjálft og vista í gagnagrunn
+    try {
+      const workout = state.planRow?.plan?.workouts?.find((w) => w.key === s.workoutKey);
+      if (workout && workout.exercises[ei]) {
+        workout.exercises[ei] = alt;
+        await sb.from("plans").update({ plan: state.planRow.plan }).eq("id", state.planRow.id);
+      }
+    } catch (_) { /* planið uppfærist þá bara ekki — æfingin heldur samt áfram */ }
+    // 2) Skipta út í yfirstandandi æfingu
+    s.exercises[ei] = {
+      name: alt.name,
+      notes: alt.notes || "",
+      video_query: alt.video_query || "",
+      restSec: alt.rest_sec || 90,
+      targetReps: alt.reps,
+      sets: Array.from({ length: alt.sets }, () => ({
+        weight: alt.weight_kg ?? "",
+        reps: "",
+        done: false,
+      })),
+    };
+    renderMain("workout");
   }
 
   // ---------- Endurgjöf eftir æfingu ----------
