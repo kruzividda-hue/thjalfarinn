@@ -165,6 +165,16 @@ textarea { resize: none; }
   font-family: inherit;
 }
 .swap-btn { color: #7dd3fc; background: rgba(125, 211, 252, 0.12); }
+.bump-chip {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: rgba(52, 211, 153, 0.12);
+  border-radius: 8px;
+  padding: 2px 8px;
+}
 .exercise-note { color: var(--text-dim); font-size: 0.85rem; margin-bottom: 8px; }
 .set-row {
   display: grid;

@@ -351,26 +351,62 @@
   }
 
   // ---------- Virk æfing ----------
-  function startWorkout(key) {
+  // Efri mörk reps-bils: "8-10" -> 10, "12" -> 12
+  function topReps(repsStr) {
+    const m = /(\d+)\s*[-–]\s*(\d+)/.exec(String(repsStr || ""));
+    if (m) return Number(m[2]);
+    const n = parseInt(repsStr, 10);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  async function startWorkout(key) {
     const plan = state.planRow?.plan;
     const workout = plan?.workouts?.find((w) => w.key === key);
     if (!workout) return;
+
+    // Sjálfvirk þyngdaraukning: náðir þú efri reps-mörkum í öllum settum
+    // síðast? Þá er stungið upp á +2,5 kg.
+    let lastLog = null;
+    try {
+      const { data } = await sb.from("workout_logs").select("log")
+        .eq("user_id", state.user.id).eq("workout_key", key)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      lastLog = data?.log || null;
+    } catch (_) { /* engin saga - ekkert mál */ }
+
     state.workoutSession = {
       workoutKey: key,
       workoutName: workout.name,
       startedAt: Date.now(),
-      exercises: workout.exercises.map((ex) => ({
-        name: ex.name,
-        notes: ex.notes || "",
-        video_query: ex.video_query || "",
-        restSec: ex.rest_sec || 90,
-        targetReps: ex.reps,
-        sets: Array.from({ length: ex.sets }, () => ({
-          weight: ex.weight_kg ?? "",
-          reps: "",
-          done: false,
-        })),
-      })),
+      exercises: workout.exercises.map((ex) => {
+        let weight = ex.weight_kg ?? "";
+        let bumped = false;
+        const prev = lastLog?.exercises?.find((p) => p.name === ex.name);
+        if (prev?.sets?.length) {
+          const prevW = Math.max(...prev.sets.map((s) => Number(s.weight_kg) || 0));
+          if (prevW > (Number(weight) || 0)) weight = prevW;
+          const top = topReps(ex.reps);
+          const hitTopOnAll = top !== null &&
+            prev.sets.every((s) => (Number(s.reps) || 0) >= top);
+          if (hitTopOnAll && prevW > 0) {
+            weight = prevW + 2.5;
+            bumped = true;
+          }
+        }
+        return {
+          name: ex.name,
+          notes: ex.notes || "",
+          video_query: ex.video_query || "",
+          restSec: ex.rest_sec || 90,
+          targetReps: ex.reps,
+          bumped,
+          sets: Array.from({ length: ex.sets }, () => ({
+            weight,
+            reps: "",
+            done: false,
+          })),
+        };
+      }),
     };
     state.tab = "workout";
     renderMain("workout");
@@ -389,7 +425,8 @@
             <button type="button" class="video-link swap-btn" data-ei="${ei}">⇄ Skipta út</button>
           </div>
           ${ex.notes ? `<div class="exercise-note">${esc(ex.notes)}</div>` : ""}
-          <div class="exercise-note">Markmið: ${ex.sets.length} sett × ${esc(ex.targetReps)} reps · hvíld ${ex.restSec}s</div>
+          <div class="exercise-note">Markmið: ${ex.sets.length} sett × ${esc(ex.targetReps)} reps · hvíld ${ex.restSec}s
+            ${ex.bumped ? `<span class="bump-chip">↑ +2,5 kg — þú náðir öllum reps síðast!</span>` : ""}</div>
           <div class="set-header"><span>#</span><span>KG</span><span>REPS</span><span></span></div>
           ${ex.sets.map((set, si) => `
             <div class="set-row">
@@ -642,8 +679,38 @@
   }
 
   // ---------- Framvinda ----------
+  // Einfalt línurit sem SVG (engin utanaðkomandi söfn)
+  function lineChart(points) {
+    if (points.length < 2) {
+      return `<p class="workout-meta">Þarf a.m.k. 2 skráningar til að teikna graf</p>`;
+    }
+    const W = 320, H = 150, P = 26;
+    const vals = points.map((p) => p.v);
+    const min = Math.min(...vals), max = Math.max(...vals);
+    const span = max - min || 1;
+    const x = (i) => P + (i * (W - 2 * P)) / (points.length - 1);
+    const y = (v) => H - P - ((v - min) * (H - 2 * P)) / span;
+    const line = points.map((p, i) => `${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
+    const dots = points.map((p, i) =>
+      `<circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="3.5" fill="#34d399"/>`).join("");
+    const last = points[points.length - 1];
+    return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" xmlns="http://www.w3.org/2000/svg">
+      <line x1="${P}" y1="${H - P}" x2="${W - P}" y2="${H - P}" stroke="#2c313c"/>
+      <polyline points="${line}" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linejoin="round"/>
+      ${dots}
+      <text x="${P}" y="${y(points[0].v) - 8}" fill="#9aa3b2" font-size="11">${points[0].v} kg</text>
+      <text x="${x(points.length - 1)}" y="${y(last.v) - 8}" fill="#f2f4f8" font-size="12" font-weight="700" text-anchor="end">${last.v} kg</text>
+      <text x="${P}" y="${H - 8}" fill="#9aa3b2" font-size="10">${esc(fmtDate(points[0].d))}</text>
+      <text x="${W - P}" y="${H - 8}" fill="#9aa3b2" font-size="10" text-anchor="end">${esc(fmtDate(last.d))}</text>
+    </svg>`;
+  }
+
   async function renderProgress(root) {
     root.innerHTML = `<h1>Framvinda 📈</h1>
+      <div class="card">
+        <button class="btn" id="weeklyBtn" style="margin-top:0">📋 Vikuyfirlit frá þjálfaranum</button>
+        <div id="weeklyStatus"></div>
+      </div>
       <h2>Líkamsþyngd</h2>
       <div class="card">
         <div class="weight-input-row">
@@ -652,8 +719,26 @@
         </div>
         <div id="weightList" style="margin-top:10px"></div>
       </div>
+      <h2>Þyngdarsaga æfinga</h2>
+      <div class="card" id="exHistoryCard"><div class="ai-thinking"><div class="spinner"></div>Hleð…</div></div>
       <h2>Síðustu æfingar</h2>
       <div id="logList"><div class="ai-thinking"><div class="spinner"></div>Hleð…</div></div>`;
+
+    document.getElementById("weeklyBtn").onclick = async () => {
+      const btn = document.getElementById("weeklyBtn");
+      const status = document.getElementById("weeklyStatus");
+      btn.disabled = true;
+      status.innerHTML = `<div class="ai-thinking"><div class="spinner"></div>Þjálfarinn tekur saman vikuna…</div>`;
+      try {
+        const res = await aiCall({ mode: "weekly" });
+        status.innerHTML = "";
+        state.chatLoaded = false; // yfirlitið vistast líka í spjallinu
+        showAiModal(res.message);
+      } catch (e) {
+        status.innerHTML = `<div class="error-msg">${esc(e.message || "Villa")}</div>`;
+      }
+      btn.disabled = false;
+    };
 
     const loadWeights = async () => {
       const { data } = await sb.from("weight_logs").select("weight_kg, created_at")
@@ -678,13 +763,46 @@
     };
 
     const { data: logs } = await sb.from("workout_logs").select("workout_key, log, feedback, created_at")
-      .eq("user_id", state.user.id).order("created_at", { ascending: false }).limit(15);
+      .eq("user_id", state.user.id).order("created_at", { ascending: false }).limit(60);
+
+    // Þyngdarsaga æfinga: mesta þyngd í hverri æfingu yfir tíma
+    const exHistory = {};
+    for (const l of [...(logs || [])].reverse()) {
+      for (const ex of l.log?.exercises || []) {
+        const maxW = Math.max(0, ...(ex.sets || []).map((s) => Number(s.weight_kg) || 0));
+        if (maxW > 0) {
+          (exHistory[ex.name] = exHistory[ex.name] || []).push({ d: l.created_at, v: maxW });
+        }
+      }
+    }
+    const exNames = Object.keys(exHistory)
+      .sort((a, b) => exHistory[b].length - exHistory[a].length);
+    const histCard = document.getElementById("exHistoryCard");
+    if (!exNames.length) {
+      histCard.innerHTML = `<p class="workout-meta">Kláraðu æfingar með skráðum þyngdum til að sjá graf</p>`;
+    } else {
+      histCard.innerHTML = `
+        <select id="exSelect">${exNames.map((n) => `<option value="${esc(n)}">${esc(n)}</option>`).join("")}</select>
+        <div id="exChart" style="margin-top:12px"></div>`;
+      const drawChart = () => {
+        const name = document.getElementById("exSelect").value;
+        const pts = exHistory[name];
+        const best = Math.max(...pts.map((p) => p.v));
+        document.getElementById("exChart").innerHTML =
+          lineChart(pts) +
+          `<div class="stat-row"><span class="dim">Besta þyngd</span><span><b>${best} kg</b></span></div>
+           <div class="stat-row"><span class="dim">Skipti skráð</span><span>${pts.length}</span></div>`;
+      };
+      document.getElementById("exSelect").onchange = drawChart;
+      drawChart();
+    }
+
     const logList = document.getElementById("logList");
     if (!logs?.length) {
       logList.innerHTML = `<div class="card"><p class="workout-meta">Engar æfingar skráðar enn — drífðu þig af stað! 💪</p></div>`;
       return;
     }
-    logList.innerHTML = logs.map((l) => {
+    logList.innerHTML = logs.slice(0, 15).map((l) => {
       const setCount = (l.log?.exercises || []).reduce((acc, ex) => acc + (ex.sets?.length || 0), 0);
       return `<div class="card">
         <div class="exercise-title">${esc(l.log?.workout_name || l.workout_key)}</div>

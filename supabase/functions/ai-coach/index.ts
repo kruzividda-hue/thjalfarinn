@@ -187,7 +187,7 @@ Deno.serve(async (req) => {
       supabase.from("plans").select("id, plan").eq("user_id", userId).eq("active", true)
         .order("created_at", { ascending: false }).limit(1).maybeSingle(),
       supabase.from("workout_logs").select("workout_key, log, feedback, created_at")
-        .eq("user_id", userId).order("created_at", { ascending: false }).limit(6),
+        .eq("user_id", userId).order("created_at", { ascending: false }).limit(10),
       supabase.from("weight_logs").select("weight_kg, created_at")
         .eq("user_id", userId).order("created_at", { ascending: false }).limit(10),
       supabase.from("chat_messages").select("role, content")
@@ -207,6 +207,13 @@ Deno.serve(async (req) => {
       userMessage = `Ég er í ræktinni og æfingin/tækið "${String(body.exerciseName ?? "")}" er ekki í boði núna.
 Komdu með 4-6 aðrar æfingar sem þjálfa SÖMU vöðva, með áherslu á það sem líklegast er til í venjulegri (jafnvel lítilli) líkamsræktarstöð — og taktu tillit til búnaðarins í prófílnum mínum og meiðsla ef einhver eru.
 Skilaðu þeim í "alternatives" með sets/reps/þyngd/hvíld/video_query eins og vanalega (svipað álag og upprunalega æfingin). plan á að vera null. Hafðu message mjög stutt.`;
+    } else if (mode === "weekly") {
+      userMessage = `Gerðu vikuyfirlit fyrir mig. Farðu yfir síðustu ~7 daga út frá gögnunum:
+- Hvaða æfingar ég kláraði miðað við markmiðið mitt um daga í viku
+- Framvindu í þyngdum og endurtekningum (nefndu dæmi)
+- Þróun líkamsþyngdar ef skráningar eru til
+- Hvað gekk vel og hvað mætti bæta
+Endaðu á 2-3 hagnýtum ráðum fyrir næstu viku. Vertu hvetjandi og hnitmiðaður. plan á að vera null nema rík ástæða sé til breytinga.`;
     } else if (mode === "checkin") {
       userMessage = `Ég var að klára æfingu. Hér er það sem ég skráði:
 ÆFING: ${JSON.stringify(body.workoutLog ?? {})}
@@ -243,10 +250,12 @@ Farðu yfir þetta, gefðu mér stutta endurgjöf og uppfærðu planið (þyngdi
     }
 
     // Vista spjallsögu (chat og checkin birtast í spjallinu)
-    if (mode === "chat" || mode === "checkin") {
+    if (mode === "chat" || mode === "checkin" || mode === "weekly") {
       const userContent = mode === "chat"
         ? String(body.message)
-        : "(Kláraði æfingu og sendi endurgjöf)";
+        : mode === "weekly"
+          ? "(Bað um vikuyfirlit)"
+          : "(Kláraði æfingu og sendi endurgjöf)";
       await supabase.from("chat_messages").insert([
         { user_id: userId, role: "user", content: userContent },
         { user_id: userId, role: "assistant", content: result.message },
