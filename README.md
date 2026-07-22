@@ -53,7 +53,7 @@ Persónulegur AI-æfingaþjálfari — vefapp (PWA) fyrir iPhone, innblásið af
 
 ## Notkun
 
-1. Stofnaðu aðgang og skráðu þig inn.
+1. Skráðu þig inn. (Nýskráning er lokuð — nýir notendur eru stofnaðir handvirkt í Supabase: **Authentication → Users → Add user → Create new user**, með haki í "Auto Confirm User". Lokaðu líka á opnar nýskráningar undir **Project Settings → Authentication → Allow new users to sign up = off**.)
 2. Svaraðu spurningalistanum (markmið, reynsla, búnaður, dagar í viku...).
 3. AI-þjálfarinn býr til planið þitt.
 4. Byrjaðu æfingu, skráðu þyngdir og reps, hakaðu við sett (hvíldartími fer sjálfkrafa í gang).
