@@ -152,6 +152,15 @@ textarea { resize: none; }
 .exercise-block { margin-bottom: 14px; }
 .exercise-title { font-weight: 700; margin-bottom: 2px; }
 .exercise-actions { display: flex; gap: 8px; margin: 4px 0 6px; }
+.exercise-photo {
+  width: 100%;
+  height: 160px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 10px;
+  margin: 8px 0 4px;
+  cursor: pointer;
+}
 .video-link {
   font-size: 0.78rem;
   font-weight: 600;

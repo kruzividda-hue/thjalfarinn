@@ -42,22 +42,62 @@
     ["sléttur", "flat"], ["slétt", "flat"], ["hallandi", "incline"],
     ["víður", "wide grip"], ["þröngur", "close grip"], ["á gólfi", ""],
   ];
-  // Slóð á sýnikennslumyndband: notar enska heitið frá AI, annars enska
-  // heitið í sviga, annars þýðingu á íslenska nafninu.
+  // Enskt heiti æfingar: video_query frá AI, annars enska heitið í sviga,
+  // annars þýðing á íslenska nafninu, annars nafnið sjálft (nýrri plön eru
+  // með ensk nöfn beint).
+  function englishName(ex) {
+    if (ex.video_query) return ex.video_query;
+    const m = /\(([^)]+)\)/.exec(ex.name || "");
+    if (m) return m[1];
+    let q = String(ex.name || "").toLowerCase();
+    for (const [is, en] of IS_EN) q = q.split(is).join(en);
+    return q.replace(/\s+/g, " ").trim() || String(ex.name || "");
+  }
+
   function videoUrl(ex) {
-    let q = ex.video_query;
-    if (!q) {
-      const m = /\(([^)]+)\)/.exec(ex.name || "");
-      if (m) {
-        q = m[1];
-      } else {
-        q = String(ex.name || "").toLowerCase();
-        for (const [is, en] of IS_EN) q = q.split(is).join(en);
-        q = q.replace(/\s+/g, " ").trim();
-      }
-    }
     return "https://www.youtube.com/results?search_query=" +
-      encodeURIComponent(q + " exercise form");
+      encodeURIComponent(englishName(ex) + " exercise form");
+  }
+
+  // ---------- Æfingamyndir (free-exercise-db, public domain) ----------
+  const EXDB_JSON = "https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@main/dist/exercises.json";
+  const EXDB_IMG = "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/";
+
+  function normTokens(s) {
+    return String(s).toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+  }
+
+  async function loadExdb() {
+    if (state.exdb) return;
+    try {
+      const cached = localStorage.getItem("exdb_v1");
+      if (cached) { state.exdb = JSON.parse(cached); return; }
+    } catch (_) { /* ekkert */ }
+    try {
+      const res = await fetch(EXDB_JSON);
+      const all = await res.json();
+      state.exdb = all
+        .filter((e) => e.images && e.images.length)
+        .map((e) => ({ t: normTokens(e.name), a: e.images[0], b: e.images[1] || e.images[0] }));
+      try { localStorage.setItem("exdb_v1", JSON.stringify(state.exdb)); } catch (_) { /* of stórt - í lagi */ }
+    } catch (_) {
+      state.exdb = []; // myndir bara sleppast ef safnið næst ekki
+    }
+  }
+
+  // Finna mynd sem passar best við enska heitið (token-skörun)
+  function findExercisePhoto(ex) {
+    if (!state.exdb || !state.exdb.length) return null;
+    const tokens = new Set(normTokens(englishName(ex)));
+    if (!tokens.size) return null;
+    let best = null, bestScore = 0;
+    for (const e of state.exdb) {
+      let inter = 0;
+      for (const tok of e.t) if (tokens.has(tok)) inter++;
+      const score = inter / Math.max(tokens.size, e.t.length);
+      if (score > bestScore) { bestScore = score; best = e; }
+    }
+    return bestScore >= 0.5 ? best : null;
   }
 
   // ---------- Stillingar ekki komnar ----------
@@ -364,6 +404,8 @@
     const workout = plan?.workouts?.find((w) => w.key === key);
     if (!workout) return;
 
+    loadExdb(); // sækja myndasafnið samhliða (myndir birtast ef það er klárt)
+
     // Sjálfvirk þyngdaraukning: náðir þú efri reps-mörkum í öllum settum
     // síðast? Þá er stungið upp á +2,5 kg.
     let lastLog = null;
@@ -417,9 +459,14 @@
     root.innerHTML = `
       <h1>${esc(s.workoutName)}</h1>
       <p class="subtitle">Skráðu þyngd og endurtekningar, hakaðu við hvert sett</p>
-      ${s.exercises.map((ex, ei) => `
+      ${s.exercises.map((ex, ei) => {
+        const ph = findExercisePhoto(ex);
+        return `
         <div class="card exercise-block">
           <div class="exercise-title">${esc(ex.name)}</div>
+          ${ph ? `<img class="exercise-photo" loading="lazy" alt=""
+                    src="${EXDB_IMG}${esc(ph.a)}"
+                    data-a="${EXDB_IMG}${esc(ph.a)}" data-b="${EXDB_IMG}${esc(ph.b)}">` : ""}
           <div class="exercise-actions">
             <a class="video-link" href="${videoUrl(ex)}" target="_blank" rel="noopener">🎥 Sýnikennsla</a>
             <button type="button" class="video-link swap-btn" data-ei="${ei}">⇄ Skipta út</button>
@@ -437,7 +484,8 @@
                      data-ei="${ei}" data-si="${si}" data-field="reps" placeholder="${esc(ex.targetReps)}">
               <button class="set-check ${set.done ? "done" : ""}" data-ei="${ei}" data-si="${si}">✓</button>
             </div>`).join("")}
-        </div>`).join("")}
+        </div>`;
+      }).join("")}
       <button class="btn" id="finishBtn">Klára æfingu 🏁</button>
       <button class="btn danger" id="cancelBtn">Hætta við</button>`;
 
@@ -467,6 +515,13 @@
     });
     root.querySelectorAll(".swap-btn").forEach((btn) => {
       btn.onclick = () => showSwapModal(Number(btn.dataset.ei));
+    });
+    // Smellur á mynd víxlar milli upphafs- og lokastöðu
+    root.querySelectorAll(".exercise-photo").forEach((img) => {
+      img.onclick = () => {
+        img.src = img.src === img.dataset.a ? img.dataset.b : img.dataset.a;
+      };
+      img.onerror = () => img.remove();
     });
     document.getElementById("cancelBtn").onclick = () => {
       if (confirm("Hætta við æfinguna? Ekkert verður vistað.")) {
