@@ -78,8 +78,9 @@
   }
 
   // ---------- Innskráning ----------
-  function renderAuth(mode = "login") {
-    const isLogin = mode === "login";
+  // Nýskráning er lokuð — aðgangar eru stofnaðir handvirkt í Supabase
+  // (Authentication -> Users -> Add user).
+  function renderAuth() {
     app.innerHTML = `
       <div class="screen no-tabs" style="padding-top: 12vh">
         <h1>Þjálfarinn 🏋️</h1>
@@ -88,16 +89,12 @@
           <label>Netfang</label>
           <input id="email" type="email" autocomplete="email" placeholder="netfang@daemi.is">
           <label>Lykilorð</label>
-          <input id="password" type="password" autocomplete="${isLogin ? "current-password" : "new-password"}" placeholder="••••••••">
-          <button class="btn" id="authBtn">${isLogin ? "Skrá inn" : "Stofna aðgang"}</button>
+          <input id="password" type="password" autocomplete="current-password" placeholder="••••••••">
+          <button class="btn" id="authBtn">Skrá inn</button>
           <div class="error-msg" id="authError"></div>
         </div>
-        <button class="link-btn" id="switchMode">
-          ${isLogin ? "Nýr notandi? Stofna aðgang" : "Áttu aðgang? Skrá inn"}
-        </button>
       </div>`;
 
-    document.getElementById("switchMode").onclick = () => renderAuth(isLogin ? "signup" : "login");
     document.getElementById("authBtn").onclick = async () => {
       const email = document.getElementById("email").value.trim();
       const password = document.getElementById("password").value;
@@ -107,20 +104,8 @@
       btn.disabled = true;
       errEl.textContent = "";
       try {
-        if (isLogin) {
-          const { error } = await sb.auth.signInWithPassword({ email, password });
-          if (error) throw error;
-        } else {
-          const { data, error } = await sb.auth.signUp({ email, password });
-          if (error) throw error;
-          if (data.user && !data.session) {
-            errEl.textContent = "";
-            document.querySelector(".card").insertAdjacentHTML("beforeend",
-              `<div class="info-msg">Staðfestingarpóstur sendur — opnaðu tölvupóstinn þinn og staðfestu, skráðu þig svo inn.</div>`);
-            btn.disabled = false;
-            return;
-          }
-        }
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) throw error;
       } catch (e) {
         errEl.textContent = e.message === "Invalid login credentials"
           ? "Rangt netfang eða lykilorð" : (e.message || "Villa");
