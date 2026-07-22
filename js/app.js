@@ -1011,12 +1011,21 @@
   }
 
   // ---------- Stillingar ----------
+  // Útgáfunúmer lesið úr ?v= á app.js (sama númer og cache-busting notar)
+  function appVersion() {
+    const script = document.querySelector('script[src*="app.js"]');
+    try {
+      const v = new URL(script.src).searchParams.get("v");
+      return v ? "v" + v : "?";
+    } catch (_) { return "?"; }
+  }
+
   function showSettings() {
     const overlay = el(`
       <div class="modal-overlay">
         <div class="modal">
           <h2>Stillingar ⚙️</h2>
-          <p class="workout-meta" style="margin-bottom:14px">${esc(state.user?.email || "")}</p>
+          <p class="workout-meta" style="margin-bottom:14px">${esc(state.user?.email || "")} · Útgáfa ${esc(appVersion())}</p>
           <button class="btn secondary" id="editProfile">Breyta prófíl / nýtt plan</button>
           <button class="btn danger" id="logout">Skrá út</button>
           <button class="link-btn" id="closeSettings">Loka</button>
