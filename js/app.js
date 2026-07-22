@@ -21,13 +21,40 @@
   function fmtDate(d) {
     return new Date(d).toLocaleDateString("is-IS", { day: "numeric", month: "short" });
   }
-  // Slóð á sýnikennslumyndband: notar enska heitið frá AI, annars
-  // enska heitið í sviga í nafninu, annars nafnið sjálft.
+  // Íslensk æfingaheiti -> ensk (varaleið þegar AI-ið skilaði ekki video_query)
+  const IS_EN = [
+    ["bringupressa", "chest press"], ["bekkpressa", "bench press"],
+    ["axlapressa", "shoulder press"], ["fótapressa", "leg press"],
+    ["niðurtog á brjóst", "lat pulldown"], ["niðurtog", "pulldown"],
+    ["róður", "row"], ["réttstöðulyfta", "deadlift"], ["hnébeygja", "squat"],
+    ["framstig", "lunge"], ["lærispark", "leg extension"], ["læriskrull", "leg curl"],
+    ["tvíhöfðakröll", "bicep curl"], ["tvíhöfða", "bicep"],
+    ["þríhöfðaniðurtog", "tricep pushdown"], ["þríhöfða", "tricep"],
+    ["hliðarlyftingar", "lateral raise"], ["framlyftingar", "front raise"],
+    ["mjaðmalyfta", "glute bridge"], ["mjaðmapressa", "hip thrust"],
+    ["kviðkreppingar", "crunch"], ["kviðæfing", "ab exercise"],
+    ["upphífingar", "pull up"], ["armbeygjur", "push up"], ["dýfur", "dips"],
+    ["planki", "plank"], ["kálfalyftur", "calf raise"], ["yppingar", "shrug"],
+    ["flugur", "fly"], ["yfirtog", "pullover"], ["bakfetta", "back extension"],
+    ["í tæki", "machine"], ["í kaðli", "cable"], ["með handlóðum", "dumbbell"],
+    ["með handlóði", "dumbbell"], ["með stöng", "barbell"], ["með ketilbjöllu", "kettlebell"],
+    ["sitjandi", "seated"], ["standandi", "standing"], ["liggjandi", "lying"],
+    ["sléttur", "flat"], ["slétt", "flat"], ["hallandi", "incline"],
+    ["víður", "wide grip"], ["þröngur", "close grip"], ["á gólfi", ""],
+  ];
+  // Slóð á sýnikennslumyndband: notar enska heitið frá AI, annars enska
+  // heitið í sviga, annars þýðingu á íslenska nafninu.
   function videoUrl(ex) {
     let q = ex.video_query;
     if (!q) {
       const m = /\(([^)]+)\)/.exec(ex.name || "");
-      q = m ? m[1] : ex.name;
+      if (m) {
+        q = m[1];
+      } else {
+        q = String(ex.name || "").toLowerCase();
+        for (const [is, en] of IS_EN) q = q.split(is).join(en);
+        q = q.replace(/\s+/g, " ").trim();
+      }
     }
     return "https://www.youtube.com/results?search_query=" +
       encodeURIComponent(q + " exercise form");
